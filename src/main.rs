@@ -8,6 +8,7 @@ mod ir_interpreter;
 mod parse;
 mod scan;
 mod tokens;
+mod types;
 
 use tokens::Token::EndOfCode;
 
@@ -40,12 +41,18 @@ fn main() {
         }
     };
 
-    let ir_func = ir_builder::build_func(ast_func);
+    let ir_func = match ir_builder::build_func(ast_func) {
+        Ok(func) => func,
+        Err(error) => {
+            println!("failed to build IR: {error}");
+            return;
+        }
+    };
 
     let result = match ir_interpreter::interpret_func(&ir_func) {
         Ok(v) => v,
         Err(error) => {
-            println!("failed to interpret: {error}");
+            println!("failed to interpret IR: {error}");
             return;
         }
     };

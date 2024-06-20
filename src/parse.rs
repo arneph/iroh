@@ -16,15 +16,27 @@ pub fn parse_func<'a>(tokens: &'a [Token]) -> Option<Func<'a>> {
 }
 
 fn parse_expr<'a>(tokens: &'a [Token], min_precedence: i8) -> Option<(Expr, &'a [Token<'a>])> {
-    let (operand_a, mut tokens) = parse_unary_expr(tokens)?;
-    let mut expr = Expr::IntLit(operand_a);
+    let (mut expr, mut tokens) = parse_unary_expr(tokens)?;
     loop {
         let op = match tokens.first() {
+            Some(Token::Or) => Or,
+            Some(Token::And) => And,
+            Some(Token::Equal) => Equal,
+            Some(Token::NotEqual) => NotEqual,
+            Some(Token::LessThan) => LessThan,
+            Some(Token::LessThanOrEqual) => LessThanOrEqual,
+            Some(Token::GreaterThanOrEqual) => GreaterThanOrEqual,
+            Some(Token::GreaterThan) => GreaterThan,
             Some(Token::Plus) => Add,
             Some(Token::Minus) => Subtract,
             Some(Token::Star) => Multipy,
             Some(Token::Slash) => Divide,
             Some(Token::Percent) => Remainder,
+            Some(Token::ShiftLeft) => ShiftLeft,
+            Some(Token::ShiftRight) => ShiftRight,
+            Some(Token::BitwiseOr) => BitwiseOr,
+            Some(Token::BitwiseXor) => BitwiseXor,
+            Some(Token::BitwiseAnd) => BitwiseAnd,
             _ => return Some((expr, tokens)),
         };
         let actual_precedence = precedence(op.clone());
@@ -43,19 +55,19 @@ fn parse_expr<'a>(tokens: &'a [Token], min_precedence: i8) -> Option<(Expr, &'a 
 
 fn precedence(op: BinaryOp) -> i8 {
     match op {
-        Add | Subtract => 0,
-        Multipy | Divide | Remainder => 1,
+        Or => 0,
+        And => 1,
+        Equal | NotEqual | LessThan | LessThanOrEqual | GreaterThanOrEqual | GreaterThan => 2,
+        Add | Subtract | BitwiseOr | BitwiseXor => 3,
+        Multipy | Divide | Remainder | ShiftLeft | ShiftRight | BitwiseAnd => 4,
     }
 }
 
-fn parse_unary_expr<'a>(tokens: &'a [Token]) -> Option<(IntLit, &'a [Token<'a>])> {
-    let (result, tokens) = parse_int_literal(tokens)?;
-    Some((IntLit { value: result }, tokens))
-}
-
-fn parse_int_literal<'a>(tokens: &'a [Token]) -> Option<(i64, &'a [Token<'a>])> {
+fn parse_unary_expr<'a>(tokens: &'a [Token]) -> Option<(Expr, &'a [Token<'a>])> {
     match tokens.first() {
-        Some(&Token::IntLiteral(value)) => Some((value, &tokens[1..])),
+        Some(Token::False) => Some((Expr::BoolLit(BoolLit::False), &tokens[1..])),
+        Some(Token::True) => Some((Expr::BoolLit(BoolLit::True), &tokens[1..])),
+        Some(&Token::IntLiteral(value)) => Some((Expr::IntLit(IntLit { value }), &tokens[1..])),
         _ => None,
     }
 }

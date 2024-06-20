@@ -6,17 +6,31 @@ pub struct Func<'a> {
 
 #[derive(Debug)]
 pub enum Expr {
+    BoolLit(BoolLit),
     IntLit(IntLit),
     BinaryExpr(Box<BinaryExpr>),
 }
 
 #[derive(Clone, Copy, Debug)]
 pub enum BinaryOp {
+    Or,
+    And,
+    Equal,
+    NotEqual,
+    LessThan,
+    LessThanOrEqual,
+    GreaterThanOrEqual,
+    GreaterThan,
     Add,
     Subtract,
     Multipy,
     Divide,
     Remainder,
+    ShiftLeft,
+    ShiftRight,
+    BitwiseOr,
+    BitwiseXor,
+    BitwiseAnd,
 }
 
 #[derive(Debug)]
@@ -24,6 +38,12 @@ pub struct BinaryExpr {
     pub operand_a: Expr,
     pub operand_b: Expr,
     pub op: BinaryOp,
+}
+
+#[derive(Debug)]
+pub enum BoolLit {
+    False,
+    True,
 }
 
 #[derive(Debug)]
