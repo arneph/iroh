@@ -2,7 +2,7 @@ use std::fmt::Display;
 
 use crate::ast;
 use crate::ir;
-use crate::ir::InstrValues;
+use crate::ir::InstrAttributes;
 use crate::ir::Value;
 use crate::types::Type::*;
 use crate::types::*;
@@ -25,7 +25,11 @@ impl Display for Error {
 pub fn build_func(func: ast::Func) -> Result<ir::Func, Error> {
     let mut ctx = BlockContext::new();
     let (instrs, result) = build_instrs_for_expr(&func.result, &mut ctx)?;
-    let block = ir::Block { instrs, result };
+    let block = ir::Block {
+        name: "entry".to_string(),
+        instrs,
+        result,
+    };
     Ok(ir::Func {
         name: func.name.to_string(),
         blocks: vec![block],

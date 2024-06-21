@@ -1,4 +1,4 @@
-use std::fmt::Display;
+use std::fmt::{Debug, Display};
 
 use crate::types::*;
 use enum_dispatch::enum_dispatch;
@@ -9,24 +9,71 @@ pub struct Func {
     pub blocks: Vec<Block>,
 }
 
+impl Display for Func {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(f, "{} {{", self.name)?;
+        for block in self.blocks.iter() {
+            write!(f, "{}", block)?;
+        }
+        writeln!(f, "}}")
+    }
+}
+
 #[derive(Debug)]
 pub struct Block {
+    pub name: String,
     pub instrs: Vec<Instr>,
     pub result: Value,
 }
 
+impl Display for Block {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(f, " {}:", self.name)?;
+        for instr in self.instrs.iter() {
+            writeln!(f, "  {}", instr)?;
+        }
+        writeln!(f, "  ret {}", self.result)
+    }
+}
+
 #[enum_dispatch]
-pub trait InstrValues {
+pub trait InstrAttributes {
+    fn name(&self) -> &'static str;
     fn arguments(&self) -> Vec<&Value>;
     fn results(&self) -> Vec<&Computed>;
 }
 
 #[derive(Debug)]
-#[enum_dispatch(InstrValues)]
+#[enum_dispatch(InstrAttributes)]
 pub enum Instr {
     BoolBinaryInstr(BoolBinaryInstr),
     IntComparisonInstr(IntComparisonInstr),
     IntBinaryInstr(IntBinaryInstr),
+}
+
+impl Display for Instr {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let results = self.results();
+        for (i, result) in results.iter().enumerate() {
+            write!(f, "{}", result)?;
+            if i < results.len() - 1 {
+                write!(f, ", ")?;
+            } else {
+                write!(f, " = ")?;
+            }
+        }
+        write!(f, "{}", self.name())?;
+        let args = self.arguments();
+        for (i, arg) in args.iter().enumerate() {
+            if i == 0 {
+                write!(f, " ")?;
+            } else {
+                write!(f, ", ")?;
+            }
+            write!(f, "{}", arg)?;
+        }
+        Ok(())
+    }
 }
 
 #[derive(Debug)]
@@ -37,6 +84,18 @@ pub enum BoolBinaryOp {
     NotEqual,
 }
 
+impl BoolBinaryOp {
+    fn name(&self) -> &'static str {
+        use BoolBinaryOp::*;
+        match self {
+            Or => "or",
+            And => "and",
+            Equal => "eq",
+            NotEqual => "ne",
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct BoolBinaryInstr {
     pub operand_a: Value,
@@ -45,7 +104,10 @@ pub struct BoolBinaryInstr {
     pub result: Computed,
 }
 
-impl InstrValues for BoolBinaryInstr {
+impl InstrAttributes for BoolBinaryInstr {
+    fn name(&self) -> &'static str {
+        self.op.name()
+    }
     fn arguments(&self) -> Vec<&Value> {
         vec![&self.operand_a, &self.operand_b]
     }
@@ -64,6 +126,20 @@ pub enum IntComparisonOp {
     GreaterThan,
 }
 
+impl IntComparisonOp {
+    fn name(&self) -> &'static str {
+        use IntComparisonOp::*;
+        match self {
+            Equal => "eq",
+            NotEqual => "ne",
+            LessThan => "lt",
+            LessThanOrEqual => "le",
+            GreaterThanOrEqual => "ge",
+            GreaterThan => "gt",
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct IntComparisonInstr {
     pub operand_a: Value,
@@ -72,7 +148,10 @@ pub struct IntComparisonInstr {
     pub result: Computed,
 }
 
-impl InstrValues for IntComparisonInstr {
+impl InstrAttributes for IntComparisonInstr {
+    fn name(&self) -> &'static str {
+        self.op.name()
+    }
     fn arguments(&self) -> Vec<&Value> {
         vec![&self.operand_a, &self.operand_b]
     }
@@ -95,6 +174,24 @@ pub enum IntBinaryOp {
     BitwiseAnd,
 }
 
+impl IntBinaryOp {
+    fn name(&self) -> &'static str {
+        use IntBinaryOp::*;
+        match self {
+            Add => "add",
+            Subtract => "sub",
+            Multipy => "mul",
+            Divide => "div",
+            Remainder => "rem",
+            ShiftLeft => "shl",
+            ShiftRight => "shr",
+            BitwiseOr => "or",
+            BitwiseXor => "xor",
+            BitwiseAnd => "and",
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct IntBinaryInstr {
     pub operand_a: Value,
@@ -103,7 +200,10 @@ pub struct IntBinaryInstr {
     pub result: Computed,
 }
 
-impl InstrValues for IntBinaryInstr {
+impl InstrAttributes for IntBinaryInstr {
+    fn name(&self) -> &'static str {
+        self.op.name()
+    }
     fn arguments(&self) -> Vec<&Value> {
         vec![&self.operand_a, &self.operand_b]
     }
@@ -116,6 +216,15 @@ impl InstrValues for IntBinaryInstr {
 pub enum Value {
     Constant(Constant),
     Computed(Computed),
+}
+
+impl Display for Value {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Value::Constant(c) => write!(f, "{}", c),
+            Value::Computed(c) => write!(f, "{}", c),
+        }
+    }
 }
 
 impl Value {
@@ -157,4 +266,10 @@ impl Display for Constant {
 pub struct Computed {
     pub name: String,
     pub typ: Type,
+}
+
+impl Display for Computed {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}:{}", self.name, self.typ)
+    }
 }

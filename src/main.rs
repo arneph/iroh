@@ -1,4 +1,3 @@
-use std::env;
 use std::fs;
 
 mod ast;
@@ -12,10 +11,20 @@ mod types;
 
 use tokens::Token::EndOfCode;
 
+use clap::Parser;
+
+#[derive(Parser)]
+struct IrohArgs {
+    file_paths: Vec<String>,
+    #[clap(long, action, default_value_t = false)]
+    print_ir: bool,
+}
+
 fn main() {
-    let args: Vec<String> = env::args().skip(1).collect();
+    // let args: Vec<String> = env::args().skip(1).collect();
+    let args = IrohArgs::parse();
     let mut code = "".to_string();
-    for file_path in args {
+    for file_path in args.file_paths {
         let contents =
             fs::read_to_string(file_path).expect("Should have been able to read the file");
         code += &contents;
@@ -48,6 +57,9 @@ fn main() {
             return;
         }
     };
+    if args.print_ir {
+        print!("{}", ir_func)
+    }
 
     let result = match ir_interpreter::interpret_func(&ir_func) {
         Ok(v) => v,
