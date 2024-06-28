@@ -9,6 +9,14 @@ pub enum Expr {
     BoolLit(BoolLit),
     IntLit(IntLit),
     BinaryExpr(Box<BinaryExpr>),
+    IfExpr(IfExpr),
+}
+
+#[derive(Debug)]
+pub struct IfExpr {
+    pub cond: Box<Expr>,
+    pub expr_if_true: Box<Expr>,
+    pub expr_if_false: Box<Expr>,
 }
 
 #[derive(Clone, Copy, Debug)]

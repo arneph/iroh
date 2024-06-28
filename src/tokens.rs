@@ -26,6 +26,8 @@ pub enum Token<'a> {
     BitwiseXor,
     BitwiseAnd,
     Function,
+    If,
+    Else,
     False,
     True,
     IntLiteral(i64),

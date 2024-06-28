@@ -68,8 +68,32 @@ fn parse_unary_expr<'a>(tokens: &'a [Token]) -> Option<(Expr, &'a [Token<'a>])> 
         Some(Token::False) => Some((Expr::BoolLit(BoolLit::False), &tokens[1..])),
         Some(Token::True) => Some((Expr::BoolLit(BoolLit::True), &tokens[1..])),
         Some(&Token::IntLiteral(value)) => Some((Expr::IntLit(IntLit { value }), &tokens[1..])),
+        Some(Token::If) => {
+            let (if_expr, tokens) = parse_if_expr(tokens)?;
+            Some((Expr::IfExpr(if_expr), tokens))
+        }
         _ => None,
     }
+}
+
+fn parse_if_expr<'a>(tokens: &'a [Token]) -> Option<(IfExpr, &'a [Token<'a>])> {
+    let tokens = consume(tokens, &Token::If)?;
+    let (cond, tokens) = parse_expr(tokens, 0)?;
+    let tokens = consume(tokens, &Token::OpenCurly)?;
+    let (expr_if_true, tokens) = parse_expr(tokens, 0)?;
+    let tokens = consume(tokens, &Token::CloseCurly)?;
+    let tokens = consume(tokens, &Token::Else)?;
+    let tokens = consume(tokens, &Token::OpenCurly)?;
+    let (expr_if_false, tokens) = parse_expr(tokens, 0)?;
+    let tokens = consume(tokens, &Token::CloseCurly)?;
+    Some((
+        IfExpr {
+            cond: Box::new(cond),
+            expr_if_true: Box::new(expr_if_true),
+            expr_if_false: Box::new(expr_if_false),
+        },
+        tokens,
+    ))
 }
 
 fn parse_identifier<'a>(tokens: &'a [Token]) -> Option<(&'a str, &'a [Token<'a>])> {

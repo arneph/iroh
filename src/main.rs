@@ -61,8 +61,13 @@ fn main() {
         print!("{}", ir_func)
     }
 
-    let result = match ir_interpreter::interpret_func(&ir_func) {
-        Ok(v) => v,
+    let result = match ir_interpreter::interpret_func(&ir_func, Vec::new()) {
+        Ok(v) => {
+            if v.len() != 1 {
+                println!("main func did not return one result");
+            }
+            v[0]
+        }
         Err(error) => {
             println!("failed to interpret IR: {error}");
             return;

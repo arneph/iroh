@@ -75,6 +75,8 @@ fn next_keyword_or_identifier(code: &str) -> (Token, &str) {
     (
         match identifier {
             "fn" => Function,
+            "if" => If,
+            "else" => Else,
             "false" => False,
             "true" => True,
             identifier => Identifier(identifier),
