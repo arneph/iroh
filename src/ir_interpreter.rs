@@ -6,9 +6,12 @@ use crate::ir::*;
 use crate::types::Type;
 
 pub enum Error {
+    ProgramHasNoMainFunc,
+    MainDidNotReturnResult,
     UnexpectedNumberOfArgs(String, String, usize, usize),
     UnexpectedNumberOfResults(String, usize, usize),
     UndefinedBlock(String, String),
+    UndefinedCallee(String),
     UndefinedComputed(String),
     RedefinedComputed(String),
     UnexpectedType(Type, Type),
@@ -18,35 +21,80 @@ impl Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         use Error::*;
         match self {
+            ProgramHasNoMainFunc => write!(f, "Program has no main function"),
+            MainDidNotReturnResult => write!(f, "Main did not return a result"),
             UnexpectedNumberOfArgs(func_name, block_name, expected, actual) => {
                 write!(
                     f,
-                    "Function '{}''s block '{}' expected {} args, got {}",
-                    func_name, block_name, expected, actual
+                    "Function '{func_name}''s block '{block_name}' expected {expected} args, got {actual}"
                 )
             }
             UnexpectedNumberOfResults(func_name, expected, actual) => {
                 write!(
                     f,
-                    "function '{}' expected {} results, got {}",
-                    func_name, expected, actual
+                    "function '{func_name}' expected {expected} results, got {actual}"
                 )
             }
             UndefinedBlock(func_name, block_name) => write!(
                 f,
-                "Function '{}' has no block named '{}'",
-                func_name, block_name
+                "Function '{func_name}' has no block named '{block_name}'"
             ),
+            UndefinedCallee(callee_name) => write!(f, "undefined callee '{callee_name}'"),
             UndefinedComputed(computed_name) => {
-                write!(f, "Undefined computed value: '{}'", computed_name)
+                write!(f, "Undefined computed value: '{computed_name}'")
             }
             RedefinedComputed(computed_name) => {
-                write!(f, "Redefined computed value: '{}'", computed_name)
+                write!(f, "Redefined computed value: '{computed_name}'")
             }
             UnexpectedType(expected, actual) => {
-                write!(f, "Expected type {:?}, got {:?}", expected, actual)
+                write!(f, "Expected type {expected:?}, got {actual:?}")
             }
         }
+    }
+}
+
+pub fn interpret_program<'a>(program: &'a Program) -> Result<Constant, Error> {
+    let main_func = program.main_func().ok_or(Error::ProgramHasNoMainFunc)?;
+    interpret_func(program, main_func, Vec::new())?.ok_or(Error::MainDidNotReturnResult)
+}
+
+fn interpret_func<'a>(
+    program: &'a Program,
+    func: &'a Func,
+    args: Vec<Constant>,
+) -> Result<Option<Constant>, Error> {
+    let mut block = func.entry_block();
+    let mut args: Vec<Constant> = args;
+    loop {
+        let result = interpret_block(program, &func.name, block, args)?;
+        use BlockResult::*;
+        match result {
+            Return(result) => {
+                return match (&func.result_type, result) {
+                    (Some(expected_result_type), Some(result)) => {
+                        if expected_result_type != &result.typ() {
+                            return Err(Error::UnexpectedType(
+                                expected_result_type.clone(),
+                                result.typ(),
+                            ));
+                        }
+                        Ok(Some(result))
+                    }
+                    (None, None) => Ok(None),
+                    (_, _) => Err(Error::UnexpectedNumberOfResults(
+                        func.name.clone(),
+                        func.result_type.iter().len(),
+                        result.iter().len(),
+                    )),
+                };
+            }
+            Jump(dest, dest_args) => {
+                block = func
+                    .block_with_name(dest)
+                    .ok_or_else(|| Error::UndefinedBlock(func.name.clone(), dest.to_string()))?;
+                args = dest_args;
+            }
+        };
     }
 }
 
@@ -97,44 +145,13 @@ impl Context {
     }
 }
 
-pub fn interpret_func<'a>(func: &'a Func, args: Vec<Constant>) -> Result<Vec<Constant>, Error> {
-    let mut block = func.entry_block();
-    let mut args: Vec<Constant> = args;
-    loop {
-        let result = interpret_block(&func.name, block, args)?;
-        use BlockResult::*;
-        match result {
-            Return(results) => {
-                if func.result_types.len() != results.len() {
-                    return Err(Error::UnexpectedNumberOfResults(
-                        func.name.clone(),
-                        func.result_types.len(),
-                        results.len(),
-                    ));
-                }
-                for (result, result_type) in zip(&results, &func.result_types) {
-                    if result.typ() != *result_type {
-                        return Err(Error::UnexpectedType(result_type.clone(), result.typ()));
-                    }
-                }
-                return Ok(results);
-            }
-            Jump(dest, dest_args) => {
-                block = func
-                    .block_with_name(dest)
-                    .ok_or_else(|| Error::UndefinedBlock(func.name.clone(), dest.to_string()))?;
-                args = dest_args;
-            }
-        };
-    }
-}
-
 enum BlockResult<'a> {
-    Return(Vec<Constant>),
+    Return(Option<Constant>),
     Jump(&'a str, Vec<Constant>),
 }
 
 fn interpret_block<'a>(
+    program: &'a Program,
     func_name: &str,
     block: &'a Block,
     args: Vec<Constant>,
@@ -154,7 +171,7 @@ fn interpret_block<'a>(
         ctx.set_computed(&arg.name, value)?;
     }
     for instr in &block.instrs {
-        interpret_instr(instr, &mut ctx)?
+        interpret_instr(program, instr, &mut ctx)?
     }
     use Continuation::*;
     Ok(match &block.cont {
@@ -172,16 +189,25 @@ fn interpret_block<'a>(
                 )
             }
         }
-        Return(ret) => BlockResult::Return(ctx.get_values(&ret.results)?),
+        Return(ret) => BlockResult::Return(
+            ret.result
+                .as_ref()
+                .map_or_else(|| Ok(None), |v| ctx.get_value(v).map(|c| Some(c)))?,
+        ),
     })
 }
 
-fn interpret_instr<'a>(instr: &'a Instr, ctx: &'a mut Context) -> Result<(), Error> {
+fn interpret_instr<'a>(
+    program: &'a Program,
+    instr: &'a Instr,
+    ctx: &'a mut Context,
+) -> Result<(), Error> {
     use Instr::*;
     match instr {
         BoolBinaryInstr(instr) => interpret_bool_binary_instr(instr, ctx),
         IntComparisonInstr(instr) => interpret_int_comparison_instr(instr, ctx),
         IntBinaryInstr(instr) => interpret_int_binary_instr(instr, ctx),
+        CallInstr(instr) => interpret_call_instr(program, instr, ctx),
     }
 }
 
@@ -239,4 +265,20 @@ fn interpret_int_binary_instr<'a>(
         BitwiseAnd => a & b,
     };
     ctx.set_computed(&instr.result.name, Constant::Int(result))
+}
+
+fn interpret_call_instr<'a>(
+    program: &'a Program,
+    instr: &'a CallInstr,
+    ctx: &'a mut Context,
+) -> Result<(), Error> {
+    let func = program
+        .func_with_name(&instr.callee)
+        .ok_or_else(|| Error::UndefinedCallee(instr.callee.clone()))?;
+    let args = ctx.get_values(&instr.args)?;
+    let results = interpret_func(program, func, args)?;
+    for (c, v) in zip(&instr.results, results) {
+        ctx.set_computed(&c.name, v)?;
+    }
+    Ok(())
 }

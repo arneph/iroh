@@ -42,7 +42,7 @@ fn main() {
         }
     }
 
-    let ast_func = match parse::parse_func(tokens.as_slice()) {
+    let ast_program = match parse::parse_program(tokens.as_slice()) {
         Some(func) => func,
         None => {
             println!("failed to parse");
@@ -50,7 +50,7 @@ fn main() {
         }
     };
 
-    let ir_func = match ir_builder::build_func(ast_func) {
+    let ir_program = match ir_builder::build_program(&ast_program) {
         Ok(func) => func,
         Err(error) => {
             println!("failed to build IR: {error}");
@@ -58,16 +58,11 @@ fn main() {
         }
     };
     if args.print_ir {
-        print!("{}", ir_func)
+        print!("{}", ir_program)
     }
 
-    let result = match ir_interpreter::interpret_func(&ir_func, Vec::new()) {
-        Ok(v) => {
-            if v.len() != 1 {
-                println!("main func did not return one result");
-            }
-            v[0]
-        }
+    let result = match ir_interpreter::interpret_program(&ir_program) {
+        Ok(v) => v,
         Err(error) => {
             println!("failed to interpret IR: {error}");
             return;

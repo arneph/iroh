@@ -7,17 +7,40 @@ use crate::types::*;
 use enum_dispatch::enum_dispatch;
 
 #[derive(Debug)]
+pub struct Program {
+    pub funcs: Vec<Func>,
+}
+
+impl Program {
+    pub fn main_func(&self) -> Option<&Func> {
+        self.func_with_name("main")
+    }
+    pub fn func_with_name<'a>(&'a self, name: &str) -> Option<&'a Func> {
+        self.funcs.iter().find(|f| f.name == name)
+    }
+}
+
+impl Display for Program {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        for func in self.funcs.iter() {
+            writeln!(f, "{}", func)?;
+        }
+        Ok(())
+    }
+}
+
+#[derive(Debug)]
 pub struct Func {
     pub name: String,
-    pub result_types: Vec<Type>,
+    pub result_type: Option<Type>,
     pub blocks: Vec<Block>,
 }
 
 impl Func {
-    pub fn new(name: &str, result_types: Vec<Type>) -> Func {
+    pub fn new(name: &str, result_type: Option<Type>) -> Func {
         Func {
             name: name.to_string(),
-            result_types: result_types,
+            result_type: result_type,
             blocks: vec![Block::new("entry", Vec::new())],
         }
     }
@@ -30,7 +53,11 @@ impl Func {
         self.blocks.first().unwrap()
     }
 
-    pub fn block_with_name<'a>(&'a self, name: &'a str) -> Option<&'a Block> {
+    pub fn entry_block_mut(&mut self) -> &mut Block {
+        self.blocks.first_mut().unwrap()
+    }
+
+    pub fn block_with_name<'a>(&'a self, name: &str) -> Option<&'a Block> {
         self.blocks.iter().find(|b| b.name == name)
     }
 
@@ -42,9 +69,21 @@ impl Func {
 
 impl Display for Func {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        writeln!(f, "{} {{", self.name)?;
+        write!(f, "{}(", self.name)?;
+        for (i, arg) in self.args().iter().enumerate() {
+            if i > 0 {
+                write!(f, ", ")?;
+            }
+            write!(f, "{}", arg.typ)?;
+        }
+        write!(f, ")")?;
+        match &self.result_type {
+            Some(result_type) => write!(f, " -> {result_type}")?,
+            None => {}
+        }
+        writeln!(f, " {{")?;
         for block in self.blocks.iter() {
-            write!(f, "{}", block)?;
+            write!(f, "{block}")?;
         }
         writeln!(f, "}}")
     }
@@ -66,9 +105,7 @@ impl Block {
             name: name.to_string(),
             args: args,
             instrs: Vec::new(),
-            cont: Continuation::Return(Return {
-                results: Vec::new(),
-            }),
+            cont: Continuation::Return(Return { result: None }),
         }
     }
 
@@ -193,21 +230,16 @@ impl InstrAttributes for CondJump {
 
 #[derive(Debug)]
 pub struct Return {
-    pub results: Vec<Value>,
+    pub result: Option<Value>,
 }
 
 impl Display for Return {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "ret")?;
-        for (i, result) in self.results.iter().enumerate() {
-            if i == 0 {
-                write!(f, " ")?;
-            } else {
-                write!(f, ", ")?;
-            }
-            write!(f, "{}", result)?;
+        match &self.result {
+            Some(result) => write!(f, " {result}"),
+            None => Ok(()),
         }
-        Ok(())
     }
 }
 
@@ -216,7 +248,7 @@ impl InstrAttributes for Return {
         "ret"
     }
     fn arguments(&self) -> Vec<&Value> {
-        self.results.iter().collect()
+        self.result.iter().collect()
     }
     fn results(&self) -> Vec<&Computed> {
         vec![]
@@ -236,6 +268,7 @@ pub enum Instr {
     BoolBinaryInstr(BoolBinaryInstr),
     IntComparisonInstr(IntComparisonInstr),
     IntBinaryInstr(IntBinaryInstr),
+    CallInstr(CallInstr),
 }
 
 impl Display for Instr {
@@ -400,6 +433,25 @@ impl InstrAttributes for IntBinaryInstr {
 }
 
 #[derive(Debug)]
+pub struct CallInstr {
+    pub callee: String,
+    pub args: Vec<Value>,
+    pub results: Vec<Computed>,
+}
+
+impl InstrAttributes for CallInstr {
+    fn name(&self) -> &'static str {
+        "call"
+    }
+    fn arguments(&self) -> Vec<&Value> {
+        self.args.iter().collect()
+    }
+    fn results(&self) -> Vec<&Computed> {
+        self.results.iter().collect()
+    }
+}
+
+#[derive(Clone, Debug)]
 pub enum Value {
     Constant(Constant),
     Computed(Computed),
